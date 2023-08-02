@@ -1,0 +1,89 @@
+name: Deploy
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+    types:
+      - opened
+      - synchronize
+      - reopened
+      - closed
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      TF_VAR_version: ${{ github.sha }}
+      TF_VAR_project: "Terraform Backend"
+      TF_VAR_environment: ${{ github.event_name == 'push' && 'production' || 'stage' }}
+      TF_VAR_branch: ${{ github.event_name == 'push' && 'main' || format('{0}-{1}', github.event.number, github.ref_name) }}
+
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v3
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v2
+        with:
+          terraform_version: 1.5.4
+
+      - name: Terraform Linting
+        if: github.event.action != 'closed'
+        working-directory: "infrastructure"
+        run: |
+          terraform fmt -check
+
+      - name: Terraform Init
+        working-directory: "infrastructure"
+        run: |
+          terraform init
+
+      - name: Terraform Validate
+        if: github.event.action != 'closed'
+        working-directory: "infrastructure"
+        run: |
+          terraform validate -no-color
+
+      - name: Terraform Plan
+        if: github.event.action != 'closed'
+        working-directory: "infrastructure"
+        run: |
+          terraform plan \
+            -no-color \
+            -out=terraform-plan.tfout
+
+      - name: Terraform Apply
+        if: github.event.action != 'closed'
+        working-directory: "infrastructure"
+        run: |
+          terraform apply \
+            -auto-approve \
+            -backend-config="bucket=${{ secrets.bucket }}" \
+            -backend-config="key=${{ secrets.key }}" \
+            -backend-config="region=${{ secrets.AWS_REGION }}" \
+            -backend-config="dynamodb_table=${{ secrets.dynamodb_table }}"
+            terraform-plan.tfout
+          echo "### 🚀 Deployed" >> $GITHUB_STEP_SUMMARY
+          echo "🏠 ${TF_VAR_environment}" >> $GITHUB_STEP_SUMMARY
+          echo "🚚 ${TF_VAR_branch}" >> $GITHUB_STEP_SUMMARY
+
+      - name: Terraform Destroy
+        if: github.event_name == 'pull_request' && github.event.action == 'closed'
+        working-directory: "infrastructure"
+        run: |
+          terraform destroy \
+            -auto-approve
+          echo "### 🔥 Destroyed" >> $GITHUB_STEP_SUMMARY
+          echo "🏠 ${TF_VAR_environment}" >> $GITHUB_STEP_SUMMARY
+          echo "🚚 ${TF_VAR_branch}" >> $GITHUB_STEP_SUMMARY
