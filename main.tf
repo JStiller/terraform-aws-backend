@@ -1,5 +1,5 @@
 resource "aws_s3_bucket" "terraform_state" {
-  bucket = locals.bucket_name
+  bucket = var.bucket_name
 
   lifecycle {
     prevent_destroy = true
@@ -34,7 +34,7 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "default" {
 }
 
 resource "aws_dynamodb_table" "terraform_state_lock" {
-  name         = locals.dynomodb_name
+  name         = var.dynomodb_table
   billing_mode = "PAY_PER_REQUEST"
   hash_key     = "LockID"
 
@@ -42,9 +42,4 @@ resource "aws_dynamodb_table" "terraform_state_lock" {
     name = "LockID"
     type = "S"
   }
-}
-
-locals {
-  bucket_name   = var.bucket_name
-  dynomodb_name = var.dynamodb_table
 }

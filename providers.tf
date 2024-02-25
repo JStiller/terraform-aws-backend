@@ -15,8 +15,10 @@ provider "aws" {
     tags = {
       Terraform   = "true",
       Environment = var.environment,
-      Version     = var.version,
-      Project     = var.project
+      Version     = var.git_hash,
+      Project     = var.project,
+      Application = var.application,
+      Owner       = var.owner
     }
   }
 }
